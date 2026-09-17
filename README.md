@@ -1,15 +1,15 @@
 # MOHAN
 
-Personal workspace for **Mohan Tyagi** — experiments, notes, and robotics-related work.
+Personal workspace for **Mohan Tyagi** — notes, experiments, and robotics-related work.
 
 ## Status
 
-Active setup. This repository is the home for project work as it develops.
+Active. This repository is the home for project work as it develops.
 
 ## Direction
 
 - Robotics and automation experiments
-- Small software tools
+- Plant IT and operations tools
 - Learning and shipping in public
 
 ## Owner
