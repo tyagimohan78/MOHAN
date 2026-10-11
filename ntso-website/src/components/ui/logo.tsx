@@ -35,7 +35,7 @@ export function Logo({ inverted = false, compact = false }: { inverted?: boolean
           NTSO<span className="text-electric-500">.</span>
         </span>
         {!compact && (
-          <span className={`mt-0.5 block text-[10px] font-semibold uppercase tracking-[0.2em] ${inverted ? "text-navy-200" : "text-slate-500"}`}>
+          <span className={`mt-0.5 block text-[10px] font-semibold uppercase tracking-[0.2em] ${inverted ? "text-navy-200" : "text-slate-600"}`}>
             Private Limited
           </span>
         )}

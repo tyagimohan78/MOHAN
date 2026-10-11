@@ -42,7 +42,7 @@ export default async function TicketDetail({ params, searchParams }: { params: P
             <ol className="space-y-3">
               {t.messages.map((m) => (
                 <li key={m.id} className={`rounded-lg p-3.5 text-sm ${m.internal ? "border border-amber-200 bg-amber-50" : m.authorType === "STAFF" ? "bg-electric-500/10" : m.authorType === "SYSTEM" ? "border border-dashed border-slate-200" : "bg-slate-50"}`}>
-                  <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <p className="flex items-center gap-1.5 text-xs text-slate-600">
                     {m.internal && <Lock className="h-3 w-3" aria-hidden="true" />}
                     {m.authorType === "CUSTOMER" ? `Customer (${t.customerName})` : m.authorType === "SYSTEM" ? "System" : m.author?.name || "Staff"}
                     {m.internal && " · internal note"} · {formatDateTime(m.createdAt)}

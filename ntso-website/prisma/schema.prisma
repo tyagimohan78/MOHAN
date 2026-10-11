@@ -291,3 +291,12 @@ model AuditLog {
 
   @@index([createdAt])
 }
+
+// Fixed-window rate-limit counters shared by all app instances. Keys contain hashed IPs only.
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}

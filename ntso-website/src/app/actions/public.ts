@@ -1,5 +1,6 @@
 "use server";
 
+import { logger } from "@/lib/server/logger";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { EnquiryType } from "@prisma/client";
@@ -45,7 +46,7 @@ function keepValues(form: FormData): Record<string, string> {
 
 async function guard(form: FormData, bucket: string, limit = 5): Promise<FormState | null> {
   const ip = await getClientIp();
-  const rl = rateLimit(`${bucket}:${ip}`, limit, 10 * 60_000);
+  const rl = await rateLimit(bucket, ip, limit, 10 * 60_000);
   if (!rl.ok) return { ok: false, message: `Too many submissions. Please try again in ${Math.ceil(rl.retryAfterSec / 60)} minute(s).`, values: keepValues(form) };
   const spam = await checkSpam(form, ip);
   if (spam) return { ok: false, message: spam, values: keepValues(form) };
@@ -64,7 +65,7 @@ export async function submitQuote(_prev: FormState, form: FormData): Promise<For
     const enquiry = await createEnquiry("QUOTE", d);
     reference = enquiry.reference;
   } catch (err) {
-    console.error("[quote] save failed", err);
+    logger.error("enquiry.save_failed", { form: "quote" }, err);
     return { ok: false, message: GENERIC_FAILURE, values: keepValues(form) };
   }
   redirect(`/request-quote/confirmation?ref=${encodeURIComponent(reference)}`);
@@ -89,7 +90,7 @@ export async function submitContact(_prev: FormState, form: FormData): Promise<F
     });
     return { ok: true, reference: e.reference, message: "Thank you — your message has been received." };
   } catch (err) {
-    console.error("[contact] save failed", err);
+    logger.error("enquiry.save_failed", { form: "contact" }, err);
     return { ok: false, message: GENERIC_FAILURE, values: keepValues(form) };
   }
 }
@@ -116,7 +117,7 @@ export async function submitRenewal(_prev: FormState, form: FormData): Promise<F
     });
     return { ok: true, reference: e.reference, message: "Your renewal enquiry has been received." };
   } catch (err) {
-    console.error("[renewal] save failed", err);
+    logger.error("enquiry.save_failed", { form: "renewal" }, err);
     return { ok: false, message: GENERIC_FAILURE, values: keepValues(form) };
   }
 }
@@ -142,7 +143,7 @@ export async function submitSurvey(_prev: FormState, form: FormData): Promise<Fo
     });
     return { ok: true, reference: e.reference, message: "Your request has been received." };
   } catch (err) {
-    console.error("[survey] save failed", err);
+    logger.error("enquiry.save_failed", { form: "survey" }, err);
     return { ok: false, message: GENERIC_FAILURE, values: keepValues(form) };
   }
 }
@@ -164,7 +165,7 @@ export async function submitTicket(_prev: FormState, form: FormData): Promise<Fo
       if ("error" in r) return { ok: false, errors: { attachments: `${f.name}: ${r.error}` }, values: keepValues(form) };
       stored.push(r);
     } catch (err) {
-      console.error("[ticket] attachment storage failed", err);
+      logger.error("ticket.attachment_store_failed", {}, err);
       return { ok: false, errors: { attachments: "Attachments could not be stored. Remove them and try again." }, values: keepValues(form) };
     }
   }
@@ -179,14 +180,14 @@ export async function submitTicket(_prev: FormState, form: FormData): Promise<Fo
     await grantTicketCookie(ticket.reference, ticket.email, accessKey);
     return { ok: true, reference: ticket.reference, accessKey, message: "Your support ticket has been created." };
   } catch (err) {
-    console.error("[ticket] save failed", err);
+    logger.error("ticket.save_failed", {}, err);
     return { ok: false, message: GENERIC_FAILURE.replace("sales@NTSO.in", "sales@NTSO.in with the subject \"Support\""), values: keepValues(form) };
   }
 }
 
 export async function lookupTicket(_prev: FormState, form: FormData): Promise<FormState> {
   const ip = await getClientIp();
-  const rl = rateLimit(`ticket-lookup:${ip}`, 10, 15 * 60_000);
+  const rl = await rateLimit("ticket-lookup", ip, 10, 15 * 60_000);
   if (!rl.ok) return { ok: false, message: "Too many attempts. Please wait a few minutes and try again." };
   const parsed = ticketLookupSchema.safeParse(formToObject(form));
   if (!parsed.success) return { ok: false, errors: toFieldErrors(parsed.error), values: keepValues(form) };
@@ -199,7 +200,7 @@ export async function lookupTicket(_prev: FormState, form: FormData): Promise<Fo
 
 export async function customerReply(reference: string, _prev: FormState, form: FormData): Promise<FormState> {
   const ip = await getClientIp();
-  if (!rateLimit(`ticket-reply:${ip}`, 10, 10 * 60_000).ok) return { ok: false, message: "Too many messages. Please wait a few minutes." };
+  if (!(await rateLimit("ticket-reply", ip, 10, 10 * 60_000)).ok) return { ok: false, message: "Too many messages. Please wait a few minutes." };
   const ticketId = await getCustomerTicketFromCookie(reference);
   if (!ticketId) return { ok: false, message: "Your access to this ticket has expired. Please look it up again." };
   const parsed = ticketReplySchema.safeParse(formToObject(form));

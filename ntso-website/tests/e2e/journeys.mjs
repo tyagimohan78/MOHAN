@@ -7,11 +7,18 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
 const db = new PrismaClient();
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+const stamp = Date.now();
 const results = [];
+// Each run uses its own client IP (the app trusts X-Real-IP from its proxy), so persistent
+// database rate limits stay enabled without one run's submissions blocking the next.
+const runIp = `10.${(stamp >> 16) & 255}.${(stamp >> 8) & 255}.${stamp & 255}`;
+const newContext = (ip = runIp) => browser.newContext({ extraHTTPHeaders: { "x-real-ip": ip } });
+const newPage = async (ip) => (await newContext(ip)).newPage();
 const run = async (name, fn) => {
   try {
     await fn();
@@ -23,7 +30,13 @@ const run = async (name, fn) => {
   }
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const stamp = Date.now();
+
+// The per-account login limit (5 / 15 min) is a security control; clear it for the two test accounts
+// only, so back-to-back suite runs are deterministic. Mirrors the key format in src/lib/server/rate-limit.ts.
+const limitKey = (scope, subject) => `${scope}:${createHash("sha256").update(subject.toLowerCase()).digest("hex").slice(0, 32)}`;
+await db.rateLimit.deleteMany({
+  where: { key: { in: [process.env.E2E_ADMIN_EMAIL, process.env.E2E_SALES_EMAIL].filter(Boolean).map((e) => limitKey("login-user", e)) } },
+});
 
 // A tiny valid PNG for upload tests, plus a fake "PNG" that is really text.
 const dir = mkdtempSync(path.join(tmpdir(), "ntso-e2e-"));
@@ -34,18 +47,20 @@ writeFileSync(fake, "<script>alert(1)</script>");
 
 await run("Quote form: validation errors shown and nothing saved", async () => {
   const before = await db.enquiry.count();
-  const page = await browser.newPage();
+  const page = await newPage();
   await page.goto(`${BASE}/request-quote`);
   await wait(2700);
   await page.click("button[type=submit]");
   await page.getByText("Please correct the highlighted fields.").waitFor();
   assert.ok(await page.getByText("Full name is required").isVisible());
+  await page.waitForFunction(() => document.activeElement?.id === "fullName");
+  assert.equal(await page.getAttribute("#fullName", "aria-describedby"), "fullName-error");
   assert.equal(await db.enquiry.count(), before);
   await page.close();
 });
 
 await run("Quote form: honeypot submissions are rejected", async () => {
-  const page = await browser.newPage();
+  const page = await newPage();
   await page.goto(`${BASE}/request-quote`);
   await page.evaluate(() => { document.querySelector("input[name=company_website]").value = "http://spam"; });
   await wait(2700);
@@ -56,7 +71,7 @@ await run("Quote form: honeypot submissions are rejected", async () => {
 
 let quoteRef;
 await run("Quote form: valid submission is saved and shows confirmation with reference", async () => {
-  const page = await browser.newPage();
+  const page = await newPage();
   await page.goto(`${BASE}/request-quote?category=Software%20Licensing&product=Microsoft%20365%20Business%20Premium`);
   assert.equal(await page.inputValue("#productName"), "Microsoft 365 Business Premium");
   await page.fill("#fullName", "Asha Verma");
@@ -82,7 +97,7 @@ await run("Quote form: valid submission is saved and shows confirmation with ref
 });
 
 await run("Contact, renewal and site-survey forms save enquiries", async () => {
-  const page = await browser.newPage();
+  const page = await newPage();
   await page.goto(`${BASE}/contact`);
   await page.fill("#fullName", "Ravi Kumar");
   await page.fill("#email", `ravi.${stamp}@example.com`);
@@ -123,7 +138,7 @@ await run("Contact, renewal and site-survey forms save enquiries", async () => {
 
 let ticketRef, accessKey;
 await run("Ticket: rejects disguised non-image upload", async () => {
-  const page = await browser.newPage();
+  const page = await newPage();
   await page.goto(`${BASE}/support/new-ticket`);
   await page.fill("#customerName", "Neha Singh");
   await page.fill("#companyName", "Singh Logistics");
@@ -140,7 +155,7 @@ await run("Ticket: rejects disguised non-image upload", async () => {
 });
 
 await run("Ticket: create with attachment, receive reference + access key, view status", async () => {
-  const page = await browser.newPage();
+  const page = await newPage();
   await page.goto(`${BASE}/support/new-ticket`);
   await page.fill("#customerName", "Neha Singh");
   await page.fill("#companyName", "Singh Logistics");
@@ -174,7 +189,7 @@ await run("Ticket: create with attachment, receive reference + access key, view 
 });
 
 await run("Ticket privacy: other visitors cannot view the ticket; wrong key rejected", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/support/ticket-status/${ticketRef}`);
   await page.getByText("Please verify access to this ticket").waitFor();
@@ -194,7 +209,7 @@ await run("Ticket privacy: other visitors cannot view the ticket; wrong key reje
 });
 
 await run("Admin: unauthenticated access redirects; protected downloads are 403", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/admin/tickets`);
   await page.waitForURL(/\/admin\/login\?next=/);
@@ -211,7 +226,7 @@ await run("Admin: unauthenticated access redirects; protected downloads are 403"
 });
 
 await run("Admin: wrong password rejected, correct login reaches dashboard", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/admin/login`);
   await page.fill("#email", process.env.E2E_ADMIN_EMAIL);
@@ -256,7 +271,7 @@ await run("Admin: wrong password rejected, correct login reaches dashboard", asy
 });
 
 await run("Customer sees staff reply but not internal note", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/support/ticket-status`);
   await page.fill("#reference", ticketRef);
@@ -271,7 +286,7 @@ await run("Customer sees staff reply but not internal note", async () => {
 });
 
 await run("Admin RBAC: SALES role cannot access tickets or settings", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/admin/login`);
   await page.fill("#email", process.env.E2E_SALES_EMAIL);
@@ -291,7 +306,7 @@ await run("Admin RBAC: SALES role cannot access tickets or settings", async () =
 
 
 await run("Admin catalogue & settings: validation keeps edits; changes appear on public site", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/admin/login`);
   await page.fill("#email", process.env.E2E_ADMIN_EMAIL);
@@ -331,8 +346,52 @@ await run("Admin catalogue & settings: validation keeps edits; changes appear on
   await ctx.close();
 });
 
+await run("Rate limiting: repeated ticket look-ups are throttled", async () => {
+  const page = await newPage(`10.250.${stamp & 255}.${(stamp >> 8) & 255}`);
+  await page.goto(`${BASE}/support/ticket-status`);
+  let throttled = false;
+  for (let i = 0; i < 12 && !throttled; i++) {
+    await page.fill("#reference", "NTSO-T-261011-ZZZZZZ");
+    await page.fill("#email", "nobody@example.com");
+    await page.fill("#accessKey", `wrong-key-${i}-000000`);
+    await Promise.all([page.waitForResponse((r) => r.request().method() === "POST"), page.click("button[type=submit]")]);
+    await page.locator("[role=alert]").first().waitFor();
+    throttled = (await page.textContent("body")).includes("Too many attempts");
+  }
+  assert.ok(throttled, "11th look-up within 15 minutes should be throttled");
+  const rows = await db.rateLimit.count({ where: { key: { startsWith: "ticket-lookup:" } } });
+  assert.ok(rows >= 1, "counter stored in database");
+  await page.close();
+});
+
+await run("Rate limiting: repeated failed logins for one account are throttled", async () => {
+  const page = await newPage(`10.251.${stamp & 255}.${(stamp >> 8) & 255}`);
+  await page.goto(`${BASE}/admin/login`);
+  const victim = `nobody-${stamp}@ntso.test`;
+  let msg = "";
+  for (let i = 0; i < 6; i++) {
+    await page.fill("#email", victim);
+    await page.fill("#password", `guess-${i}`);
+    await Promise.all([page.waitForResponse((r) => r.request().method() === "POST"), page.click("button[type=submit]")]);
+    await page.locator("[role=alert]").first().waitFor();
+    msg = await page.locator("[role=alert]").first().textContent();
+  }
+  assert.match(msg, /Too many sign-in attempts/);
+  const failed = await db.auditLog.count({ where: { action: "auth.login_failed", details: { path: ["email"], equals: victim } } });
+  assert.equal(failed, 5, "the five evaluated failures are audit-logged; the throttled attempt never checks the password");
+  await page.close();
+});
+
+await run("Health endpoint reports database status", async () => {
+  const page = await newPage();
+  const r = await page.request.get(`${BASE}/api/health`);
+  assert.equal(r.status(), 200);
+  assert.deepEqual((await r.json()).database, "ok");
+  await page.close();
+});
+
 await run("Security headers present", async () => {
-  const page = await browser.newPage();
+  const page = await newPage();
   const res = await page.goto(`${BASE}/`);
   const h = res.headers();
   assert.ok(h["content-security-policy"]?.includes("frame-ancestors 'none'"));

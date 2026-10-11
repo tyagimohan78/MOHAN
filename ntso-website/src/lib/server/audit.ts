@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "./logger";
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { getClientIp } from "./request";
@@ -7,6 +8,6 @@ export async function audit(userId: string | null, action: string, entityType: s
   try {
     await db.auditLog.create({ data: { userId, action, entityType, entityId: entityId ?? null, details, ip: await getClientIp() } });
   } catch (err) {
-    console.error("[audit] failed to write", action, err);
+    logger.error("audit.write_failed", { action }, err);
   }
 }

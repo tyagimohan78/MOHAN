@@ -6,11 +6,12 @@ import { Send } from "lucide-react";
 import { submitContact, type FormState } from "@/app/actions/public";
 import { BotProtection, Consent, FormMessage, SubmitButton, TextArea, TextField } from "./fields";
 import { SuccessPanel } from "./success-panel";
-import { useFormKey } from "./use-form-key";
+import { useFocusFirstError, useFormKey } from "./use-form-key";
 
 export function ContactForm() {
   const [state, action] = useActionState<FormState, FormData>(submitContact, { ok: false });
   const key = useFormKey(state);
+  useFocusFirstError(state, "contact-form");
   if (state.ok) {
     return (
       <SuccessPanel title="Thank you — we have received your message" reference={state.reference}>
@@ -21,7 +22,7 @@ export function ContactForm() {
   const v = state.values || {};
   const e = state.errors || {};
   return (
-    <form key={key} action={action} noValidate className="relative space-y-5">
+    <form id="contact-form" key={key} action={action} noValidate className="relative space-y-5">
       <FormMessage message={state.message} />
       <div className="grid gap-5 sm:grid-cols-2">
         <TextField name="fullName" label="Full name" required autoComplete="name" defaultValue={v.fullName} error={e.fullName} />

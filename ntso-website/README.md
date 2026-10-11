@@ -20,7 +20,7 @@ Production-ready B2B website for **NTSO Private Limited** (https://ntso.in). It 
 | Validation | Zod schemas on the server (`src/lib/validation.ts`) |
 | Email | SMTP through Nodemailer. Works with any transactional provider |
 | File storage | Local disk (dev or single server) or any S3-compatible bucket (AWS S3, Cloudflare R2, …) |
-| Tests | Vitest unit tests; Playwright end-to-end journey suite |
+| Tests | Vitest unit and integration tests (real PostgreSQL + in-process SMTP); Playwright end-to-end journeys; axe-core accessibility audit |
 
 Why not a simpler static site? The brief needs saved enquiries, a ticket workflow, customer-only ticket access, and an admin panel. Those need a server and a database. Next.js keeps the public pages fast (server-rendered, about 106 kB of shared JavaScript) and runs the backend in the same deployable app.
 
@@ -101,18 +101,22 @@ npm run dev                       # http://localhost:3000  — admin at /admin
 
 When SMTP is not configured, enquiries and tickets are still saved. Their email status shows as "not configured", and in development the console logs each email that would have been sent.
 
-### Quality checks
+### Tests and quality checks
 
-```bash
-npm run lint && npm run typecheck && npm test && npm run build
-# End-to-end journeys (needs a running server and two admin accounts: ADMIN and SALES role)
-BASE_URL=http://localhost:3000 E2E_ADMIN_EMAIL=… E2E_ADMIN_PASSWORD=… E2E_SALES_EMAIL=… E2E_SALES_PASSWORD=… \
-  CHROMIUM_PATH=/path/to/chrome node tests/e2e/journeys.mjs
-```
+| Command | What it covers | Needs |
+| --- | --- | --- |
+| `npm run lint && npm run typecheck` | ESLint (incl. jsx-a11y) and strict TypeScript | — |
+| `npm test` | Unit tests: validation schemas, reference/slug helpers, password policy, constant-time compare | — |
+| `npm run test:integration` | Server logic against a real PostgreSQL database: enquiry save + reference, email SENT / FAILED / NOT_CONFIGURED and resend (in-process SMTP server), ticket access-key hashing and verification, admin credentials and role matrix, database rate limiter (incl. concurrency), upload validation and path-traversal protection | `TEST_DATABASE_URL` pointing at a disposable database whose name contains `test` |
+| `npm run test:e2e` | 16 browser journeys (below) against a running server | `BASE_URL`, an ADMIN and a SALES account (`E2E_*` variables) |
+| `npm run test:a11y` | axe-core WCAG 2.1 A/AA audit of 27 public pages (and 15 admin screens when admin credentials are set), plus horizontal-overflow checks at 390, 768 and 1280 px | `BASE_URL` |
+| `npm run build` | Production build (does not need a database) | — |
 
-The e2e suite runs 13 journeys and creates real records, so run it against development or staging only. It covers:
+Integration tests apply migrations with the non-destructive `prisma migrate deploy` and use unique per-run data, so the test database is never wiped. Browser tests use `playwright-core`; set `CHROMIUM_PATH` or install a browser with `npx playwright-core install chromium`.
 
-- quote validation, the honeypot, and successful saves with a reference number
+The e2e journeys create real records, so run them against development or staging only. Each run uses its own client IP (via `X-Real-IP`), so database rate limits stay active without runs interfering, and the login counters for the two test accounts are cleared at the start. They cover:
+
+- quote validation (errors announced, focus moved to the first invalid field), the honeypot, and successful saves with a reference number
 - contact, renewal and site-survey submissions
 - ticket creation with an attachment; rejection of fake image files
 - ticket privacy across browsers; a wrong access key is rejected
@@ -121,7 +125,10 @@ The e2e suite runs 13 journeys and creates real records, so run it against devel
 - customers see staff replies but never internal notes
 - SALES role restrictions
 - catalogue and settings edits showing up on the public site
-- security headers
+- rate limiting of repeated ticket look-ups and of repeated failed logins for one account
+- the health endpoint and security headers
+
+The GitHub Actions workflow (`.github/workflows/ntso-website-ci.yml`) runs all of the above against a PostgreSQL service on every push that touches `ntso-website/`.
 
 ## 4. Deployment
 
@@ -129,11 +136,14 @@ The e2e suite runs 13 journeys and creates real records, so run it against devel
 
 ```bash
 cp .env.example .env    # fill in values; add POSTGRES_PASSWORD=<strong password>
-docker compose up -d --build
-docker compose exec web node node_modules/prisma/build/index.js migrate deploy   # (also runs on start-up)
-# Seed + admin: run once from a machine with the repo, pointing DATABASE_URL at the server DB,
-# or temporarily: docker compose run --rm -e ADMIN_EMAIL=… -e ADMIN_PASSWORD=… web …
+docker compose up -d --build       # the web container applies migrations on every start
+# One-time seed + first admin, from a checkout of this repo with DATABASE_URL pointing at the server DB
+# (e.g. through an SSH tunnel). The runtime image deliberately contains no dev tooling.
+npm ci && npm run db:seed
+ADMIN_EMAIL=you@ntso.in ADMIN_PASSWORD='…' ADMIN_NAME='Mohan Tyagi' npm run admin:create
 ```
+
+The image is multi-stage: Node 22 Alpine, a non-root `app` user, Next.js standalone output, and a pinned standalone Prisma CLI for `migrate deploy`. Uploads go to `/data/uploads`.
 
 Put a TLS-terminating reverse proxy in front. `Caddyfile.example` gets automatic Let's Encrypt certificates and passes `X-Real-IP` through. The app listens on `127.0.0.1:3000`. Uploads are kept in the `uploads` Docker volume.
 
@@ -141,9 +151,16 @@ Put a TLS-terminating reverse proxy in front. `Caddyfile.example` gets automatic
 
 - Use a managed PostgreSQL service (Neon, Supabase, RDS, Azure Database for PostgreSQL), with `sslmode=require` in `DATABASE_URL`.
 - On serverless or multi-instance hosts, set `STORAGE_DRIVER=s3`. Local disk does not persist there.
-- The rate limiter is in-memory, one instance at a time. With several instances, replace `src/lib/server/rate-limit.ts` with Redis or Upstash, or add rate limiting at the edge (Cloudflare or a WAF).
-- Build command: `npm run build`. Start command: `npx prisma migrate deploy && npm start`.
+- Rate limits are stored in PostgreSQL, so they hold across any number of instances. Edge rate limiting (Cloudflare or a WAF) is still a good extra layer.
+- Build command: `npm run build`. Start command: `npx prisma migrate deploy && node .next/standalone/server.js`. Copy `public/` and `.next/static/` into `.next/standalone/` first; most platforms with Next.js support handle this automatically.
 - `APP_URL`/`NEXT_PUBLIC_SITE_URL` must be set **at build time**. They control HSTS, `upgrade-insecure-requests`, canonical URLs and the sitemap.
+
+### Operations
+
+- **Health check**: `GET /api/health` returns `200 {"status":"ok","database":"ok"}`, or `503` when the database is unreachable. Point your uptime monitor and load-balancer health check at it.
+- **Maintenance**: schedule `npm run maintenance` daily (cron, platform scheduler, or `docker compose run`). It removes expired admin sessions and expired rate-limit counters. Set `AUDIT_LOG_RETENTION_DAYS` (minimum 30) to also prune old audit entries. Customer enquiries and tickets are never deleted automatically.
+- **Logs**: server events are written as one JSON line each (`event`, `level`, `time`, context), for example `enquiry.save_failed`, `email.send_failed`, `rate-limit.db_unavailable`. Secrets and form contents are never logged.
+- **Failed emails**: an enquiry whose notification failed shows "Email failed" in the admin list. Its detail page has a **Resend email** button once SMTP works.
 
 ## 5. Domain, DNS, HTTPS, database and email setup for NTSO.in
 
@@ -165,13 +182,13 @@ Put a TLS-terminating reverse proxy in front. `Caddyfile.example` gets automatic
 
 - **Input**: every form is validated with Zod on the server and control characters are stripped. Output is escaped by React, emails are HTML-escaped, and JSON-LD is serialised safely. Prisma parameterises queries. The one raw query (customers) uses tagged-template parameters.
 - **CSRF**: Server Actions only accept same-origin POSTs (Next.js checks Origin against Host). Cookies are `SameSite=Lax`, and `form-action 'self'` is set.
-- **Abuse**: per-IP rate limits on every public form, admin login (per IP and per account) and ticket lookup. A honeypot field and a minimum fill time block simple bots; Turnstile is optional.
+- **Abuse**: database-backed rate limits (shared by all instances; subjects stored as hashes) on every public form, admin login (per IP and per account) and ticket look-up. The limiter falls back to in-memory limits if the database is briefly unreachable. A honeypot field and a minimum fill time block simple bots; Turnstile is optional.
 - **Uploads**: at most 3 files of 5 MB each. The file type is checked from its bytes (PNG/JPG/WebP/PDF), not its extension, and files get random names. Ticket attachments are only available to staff with ticket permission, are served as downloads with `nosniff` and a sandboxed CSP, and every download is audit-logged.
 - **Customer ticket access**: needs the reference, the email and the access key. The key is a 144-bit random value stored only as a SHA-256 hash and compared in constant time. The httpOnly access cookie is checked again on every request. Internal notes never leave the server for customers.
 - **Admin**: bcrypt hashes, sessions stored as hashes with sliding expiry, all sessions revoked on password change or deactivation, and least-privilege roles (ADMIN / SALES / SUPPORT / CONTENT) enforced in every page, server action and route handler. An audit log records logins, failed logins, status changes, edits, exports and downloads.
 - **Headers**: CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, COOP, HSTS (over https), `noindex`/`no-store` on `/admin`, and no `X-Powered-By`.
 - **Secrets**: only from environment variables. `.env` is gitignored, and no secret is ever sent to the client.
-- **Hardening options**: nonce-based CSP to remove `'unsafe-inline'`, MFA for admins (e.g. TOTP), Redis-backed rate limits, a WAF (Cloudflare), and malware scanning for uploads.
+- **Hardening options**: nonce-based CSP to remove `'unsafe-inline'`, MFA for admins (e.g. TOTP), a WAF (Cloudflare), and malware scanning for uploads.
 
 Known dependency advisories (`npm audit`): they affect build-time tooling only (PostCSS inside Next.js's CSS pipeline, `deepmerge-ts` inside the Prisma CLI) and do not process untrusted input at runtime. Re-check before launch and upgrade when patched versions are available.
 

@@ -7,7 +7,7 @@ import { submitTicket, type FormState } from "@/app/actions/public";
 import { ticketCategories } from "@/lib/site";
 import { BotProtection, Consent, FormMessage, SelectField, SubmitButton, TextArea, TextField } from "./fields";
 import { SuccessPanel } from "./success-panel";
-import { useFormKey } from "./use-form-key";
+import { useFocusFirstError, useFormKey } from "./use-form-key";
 import { buttonClass } from "@/components/ui/button";
 
 const priorities = [
@@ -20,6 +20,7 @@ const priorities = [
 export function TicketForm() {
   const [state, action] = useActionState<FormState, FormData>(submitTicket, { ok: false });
   const key = useFormKey(state);
+  useFocusFirstError(state, "ticket-form");
 
   if (state.ok && state.reference) {
     return (
@@ -51,7 +52,7 @@ export function TicketForm() {
   const v = state.values || {};
   const e = state.errors || {};
   return (
-    <form key={key} action={action} noValidate encType="multipart/form-data" className="relative space-y-5">
+    <form id="ticket-form" key={key} action={action} noValidate encType="multipart/form-data" className="relative space-y-5">
       <FormMessage message={state.message} />
       <div className="grid gap-5 sm:grid-cols-2">
         <TextField name="customerName" label="Your name" required autoComplete="name" defaultValue={v.customerName} error={e.customerName} />
@@ -75,7 +76,7 @@ export function TicketForm() {
       <SelectField name="priority" label="Priority" required options={priorities} defaultValue={v.priority ?? "MEDIUM"} error={e.priority} hint="Our team confirms the final priority after review." />
       <div>
         <label htmlFor="attachments" className="label">
-          Attachments <span className="font-normal text-slate-400">(optional, up to 3 files, 5 MB each)</span>
+          Attachments <span className="font-normal text-slate-500">(optional, up to 3 files, 5 MB each)</span>
         </label>
         <div className="flex items-center gap-3 rounded-lg border border-dashed border-slate-300 p-3">
           <Paperclip className="h-5 w-5 shrink-0 text-slate-400" aria-hidden="true" />

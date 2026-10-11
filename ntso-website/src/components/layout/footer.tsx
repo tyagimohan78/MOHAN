@@ -2,9 +2,12 @@ import Link from "next/link";
 import { Clock, Mail, MapPin, Phone, User } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { footerNav, site } from "@/lib/site";
+import { connection } from "next/server";
 import { getSettings } from "@/lib/server/settings";
 
 export async function Footer() {
+  // Always render with live settings (also on the otherwise-static 404 page).
+  await connection();
   const s = await getSettings();
   const socials = [
     { label: "LinkedIn", href: s.linkedinUrl },

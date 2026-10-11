@@ -1,3 +1,4 @@
+import { logger } from "@/lib/server/logger";
 import type { MetadataRoute } from "next";
 import { site } from "@/lib/site";
 import { db } from "@/lib/server/db";
@@ -24,7 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       entries.push({ url, lastModified: p.updatedAt, priority: 0.5 });
     }
   } catch (err) {
-    console.error("[sitemap] database unavailable", err);
+    logger.error("sitemap.db_unavailable", {}, err);
   }
   return entries;
 }

@@ -1,5 +1,6 @@
 import "server-only";
-import { Prisma, type EnquiryStatus, type EnquiryType } from "@prisma/client";
+import { logger } from "./logger";
+import { Prisma, type Enquiry, type EnquiryStatus, type EnquiryType } from "@prisma/client";
 import { db } from "./db";
 import { makeReference } from "./reference";
 import { renderEmail, sendMail } from "./email";
@@ -38,7 +39,16 @@ export async function createEnquiry(type: EnquiryType, data: NewEnquiry) {
     }
   }
   if (!enquiry) throw new Error("Could not allocate an enquiry reference");
+  await sendEnquiryNotifications(enquiry);
+  return enquiry;
+}
 
+/**
+ * Sends the sales-team and/or customer emails for an enquiry and records the outcome.
+ * Used after creation and by the admin "resend" action for failed deliveries.
+ */
+export async function sendEnquiryNotifications(enquiry: Enquiry, which: { sales?: boolean; customer?: boolean } = { sales: true, customer: true }) {
+  const type = enquiry.type;
   const label = ENQUIRY_LABEL[type];
   const details = (enquiry.details as Record<string, string> | null) || {};
   const rows: [string, string | number | null | undefined][] = [
@@ -84,14 +94,15 @@ export async function createEnquiry(type: EnquiryType, data: NewEnquiry) {
   });
 
   const [sales, customer] = await Promise.all([
-    sendMail({ to: config.salesNotifyEmail, subject: `[${enquiry.reference}] ${label}: ${enquiry.companyName || enquiry.fullName}`, replyTo: enquiry.email, ...salesMail }),
-    sendMail({ to: enquiry.email, subject: `NTSO — ${label} received (${enquiry.reference})`, ...customerMail }),
+    which.sales
+      ? sendMail({ to: config.salesNotifyEmail, subject: `[${enquiry.reference}] ${label}: ${enquiry.companyName || enquiry.fullName}`, replyTo: enquiry.email, ...salesMail })
+      : undefined,
+    which.customer ? sendMail({ to: enquiry.email, subject: `NTSO — ${label} received (${enquiry.reference})`, ...customerMail }) : undefined,
   ]);
   await db.enquiry
-    .update({ where: { id: enquiry.id }, data: { salesNotification: sales, customerNotification: customer } })
-    .catch((err) => console.error("[enquiry] failed to record notification status", err));
-
-  return enquiry;
+    .update({ where: { id: enquiry.id }, data: { ...(sales ? { salesNotification: sales } : {}), ...(customer ? { customerNotification: customer } : {}) } })
+    .catch((err) => logger.error("enquiry.notification_status_failed", { reference: enquiry.reference }, err));
+  return { sales, customer };
 }
 
 export const ENQUIRY_TYPES = Object.keys(ENQUIRY_LABEL) as EnquiryType[];

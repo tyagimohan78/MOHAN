@@ -10,6 +10,8 @@ import { createSession, destroySession, getCurrentUser, hashPassword, requireAct
 import { rateLimit } from "@/lib/server/rate-limit";
 import { getClientIp } from "@/lib/server/request";
 import { notifyCustomerOfUpdate } from "@/lib/server/tickets";
+import { sendEnquiryNotifications } from "@/lib/server/enquiries";
+import { emailConfigured } from "@/lib/server/config";
 import { SETTING_KEYS } from "@/lib/server/settings";
 import { IMAGE_MIMES, validateAndStore } from "@/lib/server/storage";
 import { ICON_KEYS } from "@/components/ui/icon";
@@ -32,8 +34,8 @@ export async function loginAction(_prev: AdminFormState, form: FormData): Promis
   const ip = await getClientIp();
   const parsed = loginSchema.safeParse(formToObject(form));
   if (!parsed.success) return { message: "Enter your email and password." };
-  const ipLimit = rateLimit(`login-ip:${ip}`, 20, 15 * 60_000);
-  const userLimit = rateLimit(`login-user:${parsed.data.email}`, 5, 15 * 60_000);
+  const ipLimit = await rateLimit("login-ip", ip, 20, 15 * 60_000);
+  const userLimit = await rateLimit("login-user", parsed.data.email, 5, 15 * 60_000);
   if (!ipLimit.ok || !userLimit.ok) return { message: "Too many sign-in attempts. Please wait 15 minutes and try again." };
   const user = await verifyCredentials(parsed.data.email, parsed.data.password);
   if (!user) {
@@ -94,6 +96,17 @@ export async function addEnquiryNote(form: FormData) {
   await db.enquiryNote.create({ data: { enquiryId: d.id, authorId: user.id, body: d.body } });
   await audit(user.id, "enquiry.note_added", "Enquiry", d.id);
   redirect(back(`/admin/enquiries/${d.id}`, { saved: "1" }));
+}
+
+export async function resendEnquiryEmails(form: FormData) {
+  const user = await requireAction("enquiries");
+  const d = z.object({ id, target: z.enum(["sales", "customer", "both"]) }).parse(formToObject(form));
+  const e = await db.enquiry.findUniqueOrThrow({ where: { id: d.id } });
+  if (!emailConfigured()) redirect(back(`/admin/enquiries/${d.id}`, { error: "Email delivery is not configured. Set the SMTP_* environment variables first." }));
+  const r = await sendEnquiryNotifications(e, { sales: d.target !== "customer", customer: d.target !== "sales" });
+  await audit(user.id, "enquiry.notifications_resent", "Enquiry", d.id, r);
+  const failed = Object.values(r).includes("FAILED");
+  redirect(back(`/admin/enquiries/${d.id}`, failed ? { error: "Email could not be sent. Check SMTP settings and server logs." } : { saved: "1" }));
 }
 
 /* ---------------- Tickets ---------------- */

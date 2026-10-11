@@ -12,7 +12,7 @@ function FieldWrap({ name, label, required, error, hint, className = "", childre
   return (
     <div className={className}>
       <label htmlFor={name} className="label">
-        {label} {required ? <span className="text-red-600" aria-hidden="true">*</span> : <span className="font-normal text-slate-400">(optional)</span>}
+        {label} {required ? <span className="text-red-600" aria-hidden="true">*</span> : <span className="font-normal text-slate-500">(optional)</span>}
       </label>
       {children}
       {hint && !error && (

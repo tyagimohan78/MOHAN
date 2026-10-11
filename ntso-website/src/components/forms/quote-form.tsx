@@ -6,15 +6,16 @@ import { ArrowRight, ShieldAlert } from "lucide-react";
 import { submitQuote, type FormState } from "@/app/actions/public";
 import { contactMethods, licenseDurations, quoteCategories } from "@/lib/site";
 import { BotProtection, Consent, FormMessage, SelectField, SubmitButton, TextArea, TextField } from "./fields";
-import { useFormKey } from "./use-form-key";
+import { useFocusFirstError, useFormKey } from "./use-form-key";
 
 export function QuoteForm({ defaults = {}, sourcePage = "/request-quote" }: { defaults?: { category?: string; productName?: string }; sourcePage?: string }) {
   const [state, action] = useActionState<FormState, FormData>(submitQuote, { ok: false });
   const key = useFormKey(state);
+  useFocusFirstError(state, "quote-form");
   const v = state.values || {};
   const e = state.errors || {};
   return (
-    <form key={key} action={action} noValidate className="relative space-y-5" aria-describedby="quote-form-status">
+    <form id="quote-form" key={key} action={action} noValidate className="relative space-y-5" aria-describedby="quote-form-status">
       <div id="quote-form-status">
         <FormMessage message={state.message} ok={state.ok} />
       </div>
@@ -47,12 +48,12 @@ export function QuoteForm({ defaults = {}, sourcePage = "/request-quote" }: { de
         <div className="flex flex-wrap gap-2">
           {contactMethods.map((m) => (
             <label key={m} className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3.5 py-2 text-sm has-[:checked]:border-electric-500 has-[:checked]:bg-electric-500/10 has-[:checked]:text-navy-900">
-              <input type="radio" name="preferredContact" value={m} defaultChecked={(v.preferredContact || "Email") === m} className="accent-electric-600" />
+              <input type="radio" name="preferredContact" value={m} data-invalid={e.preferredContact ? "true" : undefined} aria-describedby={e.preferredContact ? "preferredContact-error" : undefined} defaultChecked={(v.preferredContact || "Email") === m} className="accent-electric-600" />
               {m}
             </label>
           ))}
         </div>
-        {e.preferredContact && <p className="mt-1.5 text-xs font-medium text-red-600">{e.preferredContact}</p>}
+        {e.preferredContact && <p id="preferredContact-error" className="mt-1.5 text-xs font-medium text-red-600">{e.preferredContact}</p>}
       </fieldset>
       <p className="flex gap-2 rounded-lg bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
         <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" /> Please do not include passwords, license keys or other credentials in this form.

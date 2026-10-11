@@ -6,13 +6,14 @@ import { RefreshCw } from "lucide-react";
 import { submitRenewal, type FormState } from "@/app/actions/public";
 import { BotProtection, Consent, FormMessage, SelectField, SubmitButton, TextArea, TextField } from "./fields";
 import { SuccessPanel } from "./success-panel";
-import { useFormKey } from "./use-form-key";
+import { useFocusFirstError, useFormKey } from "./use-form-key";
 
 const vendors = ["Microsoft", "Sophos", "Fortinet", "Cisco", "ESET", "Bitdefender", "Veeam", "Acronis", "VMware / Broadcom", "Adobe", "Other"];
 
 export function RenewalForm({ defaultProduct }: { defaultProduct?: string }) {
   const [state, action] = useActionState<FormState, FormData>(submitRenewal, { ok: false });
   const key = useFormKey(state);
+  useFocusFirstError(state, "renewal-form");
   if (state.ok) {
     return (
       <SuccessPanel title="Renewal enquiry received" reference={state.reference}>
@@ -23,7 +24,7 @@ export function RenewalForm({ defaultProduct }: { defaultProduct?: string }) {
   const v = state.values || {};
   const e = state.errors || {};
   return (
-    <form key={key} action={action} noValidate className="relative space-y-5">
+    <form id="renewal-form" key={key} action={action} noValidate className="relative space-y-5">
       <FormMessage message={state.message} />
       <div className="grid gap-5 sm:grid-cols-2">
         <TextField name="fullName" label="Full name" required autoComplete="name" defaultValue={v.fullName} error={e.fullName} />

@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "./logger";
 import { cache } from "react";
 import { db } from "./db";
 
@@ -46,7 +47,7 @@ export const getSettings = cache(async (): Promise<SiteSettings> => {
     for (const r of rows) if (r.key in out) out[r.key as SettingKey] = r.value;
     return out;
   } catch (err) {
-    console.error("[settings] database unavailable, using defaults", err);
+    logger.error("settings.db_unavailable", {}, err);
     return { ...DEFAULT_SETTINGS };
   }
 });

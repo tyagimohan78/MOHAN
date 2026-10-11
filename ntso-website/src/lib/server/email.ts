@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "./logger";
 import nodemailer, { type Transporter } from "nodemailer";
 import { config, emailConfigured } from "./config";
 
@@ -54,7 +55,7 @@ export async function sendMail(msg: { to: string; subject: string; html: string;
   const t = getTransporter();
   if (!t) {
     if (process.env.NODE_ENV !== "production") {
-      console.info(`[email:not-configured] to=${msg.to} subject="${msg.subject}"`);
+      logger.info("email.not_configured", { subject: msg.subject });
     }
     return "NOT_CONFIGURED";
   }
@@ -62,7 +63,7 @@ export async function sendMail(msg: { to: string; subject: string; html: string;
     await t.sendMail({ from: config.smtp.from, ...msg, subject: msg.subject.replace(/[\r\n]+/g, " ") });
     return "SENT";
   } catch (err) {
-    console.error("[email:failed]", msg.subject, err instanceof Error ? err.message : err);
+    logger.error("email.send_failed", { subject: msg.subject }, err);
     return "FAILED";
   }
 }

@@ -73,7 +73,7 @@ export default async function AmcPage() {
         <ol className="grid gap-5 md:grid-cols-4">
           {["Share your asset list or request an assessment", "We review assets, locations and support needs", "You receive a written AMC proposal with scope and exclusions", "Maintenance begins and tickets are tracked in the Support Center"].map((t, i) => (
             <li key={t} className="rounded-2xl border border-navy-100 p-6">
-              <span className="font-display text-3xl font-extrabold text-electric-500">0{i + 1}</span>
+              <span className="font-display text-3xl font-extrabold text-electric-700">0{i + 1}</span>
               <p className="mt-3 text-sm leading-6 text-slate-700">{t}</p>
             </li>
           ))}

@@ -6,7 +6,7 @@ import { CalendarCheck } from "lucide-react";
 import { submitSurvey, type FormState } from "@/app/actions/public";
 import { BotProtection, Consent, FormMessage, SelectField, SubmitButton, TextArea, TextField } from "./fields";
 import { SuccessPanel } from "./success-panel";
-import { useFormKey } from "./use-form-key";
+import { useFocusFirstError, useFormKey } from "./use-form-key";
 
 const types = ["CCTV site survey", "Network / cabling site survey", "IT infrastructure audit", "Network consultation"] as const;
 const siteTypes = ["Corporate office", "Factory / plant", "Warehouse", "Hospital / clinic", "School / college", "Retail store", "Multi-site / branches", "Other"];
@@ -14,6 +14,7 @@ const siteTypes = ["Corporate office", "Factory / plant", "Warehouse", "Hospital
 export function SurveyForm({ defaultType = "Network / cabling site survey", sourcePage }: { defaultType?: (typeof types)[number]; sourcePage: string }) {
   const [state, action] = useActionState<FormState, FormData>(submitSurvey, { ok: false });
   const key = useFormKey(state);
+  useFocusFirstError(state, "survey-form");
   if (state.ok) {
     return (
       <SuccessPanel title="Request received" reference={state.reference}>
@@ -24,7 +25,7 @@ export function SurveyForm({ defaultType = "Network / cabling site survey", sour
   const v = state.values || {};
   const e = state.errors || {};
   return (
-    <form key={key} action={action} noValidate className="relative space-y-5">
+    <form id="survey-form" key={key} action={action} noValidate className="relative space-y-5">
       <FormMessage message={state.message} />
       <div className="grid gap-5 sm:grid-cols-2">
         <SelectField name="surveyType" label="Request type" required options={types} defaultValue={v.surveyType ?? defaultType} error={e.surveyType} />

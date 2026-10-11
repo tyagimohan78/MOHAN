@@ -15,7 +15,8 @@ Items marked ☐ need credentials, a business decision or verification before la
 | ☐ A7 | **Public URL at build time** | `https://ntso.in` | `APP_URL`, `NEXT_PUBLIC_SITE_URL` |
 | ☐ A8 | **Admin accounts** | Create real staff accounts with strong unique passwords; give staff the least-privilege role they need | `npm run admin:create`, then `/admin/users` |
 | ☐ A9 | **Bot protection** (optional, recommended) | Cloudflare Turnstile site key and secret | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` |
-| ☐ A10 | **Multi-instance rate limiting** (only when running more than one instance) | Redis or Upstash, or edge/WAF rate limiting | `src/lib/server/rate-limit.ts` |
+| ☐ A10 | **Scheduled maintenance** | Daily `npm run maintenance` job; optionally `AUDIT_LOG_RETENTION_DAYS` | cron / platform scheduler |
+| ☐ A13 | **Uptime monitoring** | Monitor `https://ntso.in/api/health` (expects HTTP 200) | uptime service / load balancer |
 | ☐ A11 | **Analytics** (optional) | A privacy-friendly tool (e.g. Plausible or self-hosted Umami). Update the CSP and privacy policy when adding it | `next.config.ts`, `/privacy-policy` |
 | ☐ A12 | **Google Search Console / Bing Webmaster** | Verify the domain and submit `https://ntso.in/sitemap.xml` | DNS TXT |
 
@@ -45,7 +46,7 @@ Items marked ☐ need credentials, a business decision or verification before la
 ## E. Final technical checks
 
 - ☐ `npm run lint && npm run typecheck && npm test && npm run build` pass
-- ☐ Run the e2e journeys against staging (`tests/e2e/journeys.mjs`)
+- ☐ Run `npm run test:integration`, `npm run test:e2e` and `npm run test:a11y` against staging (or confirm the GitHub Actions run is green)
 - ☐ Submit a real quote and a real ticket on production; confirm that both emails arrive and are not marked as spam
 - ☐ Check the security headers with securityheaders.com and the TLS setup with SSL Labs
 - ☐ Lighthouse (mobile): Performance, Accessibility, Best Practices and SEO are all green

@@ -8,7 +8,7 @@ import { requirePage } from "@/lib/server/auth";
 import { db } from "@/lib/server/db";
 import { ENQUIRY_LABEL } from "@/lib/server/enquiries";
 import { formatDateTime } from "@/lib/format";
-import { addEnquiryNote, updateEnquiry } from "@/app/admin/actions";
+import { addEnquiryNote, resendEnquiryEmails, updateEnquiry } from "@/app/admin/actions";
 
 export const metadata = { title: "Enquiry" };
 
@@ -91,6 +91,18 @@ export default async function EnquiryDetail({ params, searchParams }: { params: 
               <div className="flex justify-between"><dt>Sales team</dt><dd><Badge tone={mailTone[e.salesNotification]}>{e.salesNotification.replace("_", " ").toLowerCase()}</Badge></dd></div>
               <div className="flex justify-between"><dt>Customer confirmation</dt><dd><Badge tone={mailTone[e.customerNotification]}>{e.customerNotification.replace("_", " ").toLowerCase()}</Badge></dd></div>
             </dl>
+            {(e.salesNotification !== "SENT" || e.customerNotification !== "SENT") && (
+              <form action={resendEnquiryEmails} className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+                <input type="hidden" name="id" value={e.id} />
+                <label htmlFor="target" className="sr-only">Resend to</label>
+                <select id="target" name="target" defaultValue={e.salesNotification !== "SENT" && e.customerNotification !== "SENT" ? "both" : e.salesNotification !== "SENT" ? "sales" : "customer"} className="input w-auto py-1.5">
+                  <option value="both">Sales team + customer</option>
+                  <option value="sales">Sales team only</option>
+                  <option value="customer">Customer only</option>
+                </select>
+                <SaveButton>Resend email</SaveButton>
+              </form>
+            )}
           </Card>
         </div>
       </div>
