@@ -27,6 +27,9 @@ export const config = {
   sessionDays: Number(process.env.ADMIN_SESSION_DAYS || 7),
   // The app is expected to run behind a reverse proxy / platform that sets X-Real-IP or X-Forwarded-For.
   trustProxy: process.env.TRUST_PROXY !== "false",
+  // Optional: a single header your hosting platform sets to the real client IP (e.g. "cf-connecting-ip",
+  // "true-client-ip", "fly-client-ip"). Takes precedence over X-Real-IP / X-Forwarded-For.
+  clientIpHeader: (process.env.CLIENT_IP_HEADER || "").trim().toLowerCase(),
 };
 
 export const emailConfigured = () => Boolean(config.smtp.host && config.smtp.user && config.smtp.pass);

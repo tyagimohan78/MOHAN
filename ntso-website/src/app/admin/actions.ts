@@ -11,7 +11,8 @@ import { rateLimit } from "@/lib/server/rate-limit";
 import { getClientIp } from "@/lib/server/request";
 import { notifyCustomerOfUpdate } from "@/lib/server/tickets";
 import { sendEnquiryNotifications } from "@/lib/server/enquiries";
-import { emailConfigured } from "@/lib/server/config";
+import { config, emailConfigured } from "@/lib/server/config";
+import { renderEmail, sendMail } from "@/lib/server/email";
 import { SETTING_KEYS } from "@/lib/server/settings";
 import { IMAGE_MIMES, validateAndStore } from "@/lib/server/storage";
 import { ICON_KEYS } from "@/components/ui/icon";
@@ -350,6 +351,20 @@ export async function saveSettings(_prev: AdminFormState, form: FormData): Promi
   await audit(user.id, "settings.updated", "Setting", null, { keys: entries.map(([k]) => k) });
   revalidatePath("/", "layout");
   return { ok: true, message: "Settings saved." };
+}
+
+export async function sendTestEmail(): Promise<AdminFormState> {
+  const user = await requireAction("settings");
+  if (!emailConfigured()) return { message: "SMTP is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM, then redeploy." };
+  const result = await sendMail({
+    to: user.email,
+    subject: "NTSO website — test email",
+    ...renderEmail({ heading: "Email delivery is working", intro: [`This test was sent from the NTSO website admin by ${user.name}.`, `Sales notifications are delivered to ${config.salesNotifyEmail}.`] }),
+  });
+  await audit(user.id, "settings.test_email", "Setting", null, { result });
+  return result === "SENT"
+    ? { ok: true, message: `Test email sent to ${user.email}. Check the inbox (and spam folder).` }
+    : { message: "Sending failed. Check the SMTP settings and the server logs (event email.send_failed)." };
 }
 
 /* ---------------- Users ---------------- */

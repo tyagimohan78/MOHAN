@@ -75,3 +75,18 @@ export async function getObject(key: string): Promise<Buffer | null> {
     return null;
   }
 }
+
+/** Verifies uploads can be written (local driver: write + delete a probe file; S3: put + head is left to the platform). */
+export async function checkStorageWritable(): Promise<"ok" | "error" | "not-checked"> {
+  if (config.storage.driver === "s3") return config.storage.s3Bucket ? "not-checked" : "error";
+  const dir = path.resolve(config.storage.localDir);
+  const probe = path.join(dir, `.write-probe-${randomBytes(4).toString("hex")}`);
+  try {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(probe, "ok");
+    await fs.unlink(probe);
+    return "ok";
+  } catch {
+    return "error";
+  }
+}

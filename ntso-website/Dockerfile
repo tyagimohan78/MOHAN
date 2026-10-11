@@ -17,12 +17,12 @@ ARG APP_URL=https://ntso.in
 ARG NEXT_PUBLIC_SITE_URL=https://ntso.in
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 ENV NEXT_TELEMETRY_DISABLED=1 APP_URL=$APP_URL NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
-RUN npx prisma generate && npx next build
+RUN npx prisma generate && npx next build && npm run build:ops
 
 FROM node:22-alpine AS runner
 WORKDIR /app
 # OpenSSL 3 (needed by Prisma) ships in the node:22-alpine base image.
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S -g 1001 app && adduser -S -u 1001 -G app app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 UPLOAD_DIR=/data/uploads
 COPY --from=build /app/public ./public
 COPY --from=build --chown=app:app /app/.next/standalone ./
@@ -30,7 +30,11 @@ COPY --from=build --chown=app:app /app/.next/static ./.next/static
 # Prisma schema + migrations and the standalone CLI for `migrate deploy` at start-up
 COPY --from=build /app/prisma ./prisma
 COPY --from=deps /prisma-cli /prisma-cli
+# Operational scripts (bundled JS): node ops/seed.js · node ops/create-admin.js · node ops/maintenance.js
+COPY --from=build /app/ops ./ops
+COPY docker-entrypoint.js ./docker-entrypoint.js
 RUN mkdir -p /data/uploads && chown -R app:app /data
-USER app
+# The entrypoint starts as root only to fix ownership of a mounted upload disk, then runs
+# migrations and the server as the unprivileged `app` user (uid/gid 1001).
 EXPOSE 3000
-CMD ["sh", "-c", "node /prisma-cli/node_modules/prisma/build/index.js migrate deploy --schema prisma/schema.prisma && node server.js"]
+CMD ["node", "docker-entrypoint.js"]
