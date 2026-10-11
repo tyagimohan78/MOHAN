@@ -142,6 +142,8 @@ The Docker image includes operational scripts you can run inside the container (
 | `ADMIN_EMAIL=… ADMIN_PASSWORD=… ADMIN_NAME=… node ops/create-admin.js` | Create or reset an admin account |
 | `node ops/maintenance.js` | Expired-session and rate-limit clean-up |
 
+Optional first-run bootstrap through environment variables (for hosts without shell access): `SEED_ON_START=true` loads the catalogue on every start (idempotent). `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` / `INITIAL_ADMIN_NAME` create the first ADMIN account only when none exists.
+
 The container starts as root only long enough to make a mounted upload disk writable. Database migrations and the web server then run as the unprivileged `app` user (uid 1001).
 
 Admin → Website settings has deployment diagnostics: the client IP the site detects (to configure `CLIENT_IP_HEADER`), an upload-storage write check, and a **Send test email** button.

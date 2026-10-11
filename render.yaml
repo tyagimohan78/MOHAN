@@ -57,6 +57,15 @@ services:
         sync: false
       - key: CLIENT_IP_HEADER
         sync: false
+      # First-run bootstrap: load the catalogue and create the first admin (only if none exists).
+      - key: SEED_ON_START
+        value: "true"
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false
+      - key: INITIAL_ADMIN_NAME
+        value: Mohan Tyagi
       - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
         sync: false
       - key: TURNSTILE_SECRET_KEY
