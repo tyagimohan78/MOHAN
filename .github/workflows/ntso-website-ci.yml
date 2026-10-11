@@ -1,0 +1,28 @@
+name: ntso-website CI
+on:
+  push:
+    paths: ["ntso-website/**", ".github/workflows/ntso-website-ci.yml"]
+  pull_request:
+    paths: ["ntso-website/**", ".github/workflows/ntso-website-ci.yml"]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ntso-website
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+      APP_URL: https://ntso.in
+      NEXT_PUBLIC_SITE_URL: https://ntso.in
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ntso-website/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

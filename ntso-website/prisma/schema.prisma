@@ -1,0 +1,293 @@
+// NTSO Private Limited — data model
+// PostgreSQL is the production target. All customer data lives here; never commit .env.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN // full access incl. users, settings, audit log
+  SALES // enquiries, customers
+  SUPPORT // support tickets
+  CONTENT // products, services, FAQs
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions          Session[]
+  auditLogs         AuditLog[]
+  assignedEnquiries Enquiry[]       @relation("EnquiryAssignee")
+  assignedTickets   Ticket[]        @relation("TicketAssignee")
+  enquiryNotes      EnquiryNote[]
+  ticketMessages    TicketMessage[]
+}
+
+// Session id is the SHA-256 hash of the random token stored in the cookie,
+// so a database leak does not expose usable session tokens.
+model Session {
+  id        String    @id
+  userId    String
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  userAgent String?
+
+  @@index([userId])
+}
+
+enum CatalogKind {
+  HARDWARE
+  SOFTWARE
+}
+
+model ProductCategory {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  name        String
+  kind        CatalogKind
+  group       String // e.g. "Computing Devices", "Microsoft", "Sophos"
+  description String
+  icon        String // lucide icon key, see src/components/ui/icon.tsx
+  sortOrder   Int         @default(0)
+  featured    Boolean     @default(false)
+  published   Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  products    Product[]
+
+  @@index([kind, sortOrder])
+}
+
+model Product {
+  id               String          @id @default(cuid())
+  slug             String          @unique
+  name             String
+  vendor           String?
+  categoryId       String
+  category         ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  shortDescription String
+  description      String
+  highlights       String[]
+  useCase          String?
+  imageUrl         String?
+  imageAlt         String?
+  // Software licensing attributes (null for hardware)
+  licenseType      String?
+  subscriptionTerm String?
+  licensedPer      String?
+  // Content governance: sample items are illustrative and must be verified before launch.
+  isSample         Boolean         @default(true)
+  featured         Boolean         @default(false)
+  published        Boolean         @default(true)
+  sortOrder        Int             @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([categoryId, sortOrder])
+}
+
+enum DeliveryMode {
+  DIRECT
+  PARTNER
+  DIRECT_OR_PARTNER
+}
+
+// Service offerings shown on service pages (pageKey groups them by page).
+model Service {
+  id          String       @id @default(cuid())
+  pageKey     String // network | cloud | cybersecurity | cctv | support | amc | procurement
+  group       String
+  name        String
+  description String
+  delivery    DeliveryMode @default(DIRECT)
+  sortOrder   Int          @default(0)
+  published   Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([pageKey, sortOrder])
+}
+
+enum EnquiryType {
+  QUOTE
+  CONTACT
+  LICENSE_RENEWAL
+  SITE_SURVEY
+  CONSULTATION
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  QUOTED
+  WON
+  LOST
+  CLOSED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  NOT_CONFIGURED
+}
+
+model Enquiry {
+  id                 String             @id @default(cuid())
+  reference          String             @unique
+  type               EnquiryType
+  status             EnquiryStatus      @default(NEW)
+  fullName           String
+  companyName        String?
+  email              String
+  phone              String?
+  city               String?
+  category           String?
+  productName        String?
+  quantity           Int?
+  licenseDuration    String?
+  requirement        String
+  preferredContact   String?
+  sourcePage         String?
+  details            Json?
+  assignedToId       String?
+  assignedTo         AdminUser?         @relation("EnquiryAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  salesNotification  NotificationStatus @default(PENDING)
+  customerNotification NotificationStatus @default(PENDING)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  notes              EnquiryNote[]
+
+  @@index([type, status, createdAt])
+  @@index([email])
+}
+
+model EnquiryNote {
+  id        String    @id @default(cuid())
+  enquiryId String
+  enquiry   Enquiry   @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    AdminUser @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime  @default(now())
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Ticket {
+  id            String         @id @default(cuid())
+  reference     String         @unique
+  // SHA-256 of the customer's access key. The key is shown once and emailed; never stored in plain text.
+  accessKeyHash String
+  status        TicketStatus   @default(OPEN)
+  priority      TicketPriority @default(MEDIUM)
+  customerName  String
+  companyName   String
+  email         String
+  phone         String?
+  category      String
+  affectedItem  String?
+  subject       String
+  description   String
+  assignedToId  String?
+  assignedTo    AdminUser?     @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  messages      TicketMessage[]
+  attachments   TicketAttachment[]
+
+  @@index([status, priority, createdAt])
+  @@index([email])
+}
+
+enum MessageAuthor {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
+model TicketMessage {
+  id         String        @id @default(cuid())
+  ticketId   String
+  ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorType MessageAuthor
+  authorId   String?
+  author     AdminUser?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body       String
+  internal   Boolean       @default(false) // internal notes are never shown to customers
+  createdAt  DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model TicketAttachment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fileName   String
+  storageKey String   @unique
+  mimeType   String
+  size       Int
+  createdAt  DateTime @default(now())
+}
+
+model Faq {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  category  String   @default("General")
+  sortOrder Int      @default(0)
+  showOnHome Boolean @default(false)
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String     @id @default(cuid())
+  userId     String?
+  user       AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  ip         String?
+  createdAt  DateTime   @default(now())
+
+  @@index([createdAt])
+}
