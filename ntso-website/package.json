@@ -18,7 +18,8 @@
     "maintenance": "tsx scripts/maintenance.ts",
     "test:integration": "vitest run --project integration",
     "test:e2e": "node tests/e2e/journeys.mjs",
-    "test:a11y": "node tests/e2e/a11y.mjs"
+    "test:a11y": "node tests/e2e/a11y.mjs",
+    "build:ops": "esbuild prisma/seed.ts scripts/create-admin.ts scripts/maintenance.ts --bundle --platform=node --target=node20 --format=cjs --outdir=ops --entry-names=[name] --external:@prisma/client --log-level=warning"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -50,6 +51,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/smtp-server": "^3.5.13",
     "axe-core": "^4.14.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.27",
     "mailparser": "^3.9.38",

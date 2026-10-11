@@ -1,5 +1,7 @@
 # NTSO.in — Pre-launch checklist
 
+For the deployment walkthrough (Render, Zoho Mail, Brevo, DNS) see [`deploy-render.md`](deploy-render.md).
+
 Items marked ☐ need credentials, a business decision or verification before launch. The code side of every item is already built.
 
 ## A. Integrations that need credentials or configuration

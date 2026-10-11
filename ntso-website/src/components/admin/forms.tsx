@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import type { AdminUser, Faq, ProductCategory, Service } from "@prisma/client";
-import { saveCategory, saveFaq, saveService, saveSettings, saveUser, changeOwnPassword, type AdminFormState } from "@/app/admin/actions";
+import { saveCategory, saveFaq, saveService, saveSettings, saveUser, changeOwnPassword, sendTestEmail, type AdminFormState } from "@/app/admin/actions";
 import { FormMessage } from "@/components/forms/fields";
 import { ActionForm, Check, Field, SaveButton } from "./form-bits";
 
@@ -141,6 +141,16 @@ export function PasswordForm() {
       <Field label="New password" name="password" error={e.password} hint="Min. 12 characters with upper/lower-case letters and a number."><input id="password" name="password" type="password" autoComplete="new-password" required className="input" /></Field>
       <Field label="Confirm new password" name="confirm" error={e.confirm}><input id="confirm" name="confirm" type="password" autoComplete="new-password" required className="input" /></Field>
       <SaveButton>Change password</SaveButton>
+    </ActionForm>
+  );
+}
+
+export function TestEmailForm() {
+  const [s, action] = useActionState<AdminFormState>(sendTestEmail, {});
+  return (
+    <ActionForm action={() => action()} className="space-y-3">
+      <FormMessage message={s.message} ok={s.ok} />
+      <SaveButton>Send test email to me</SaveButton>
     </ActionForm>
   );
 }

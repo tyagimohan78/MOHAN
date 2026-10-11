@@ -1,0 +1,81 @@
+# Render Blueprint for the NTSO website (https://render.com/docs/blueprint-spec)
+# Creates: PostgreSQL database, the website (Docker, with a persistent upload disk), and a daily maintenance job.
+# Region: Singapore (closest Render region to India). Secrets marked `sync: false` are entered in the Render dashboard.
+
+databases:
+  - name: ntso-db
+    databaseName: ntso
+    user: ntso
+    region: singapore
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+    ipAllowList: [] # only Render services can connect
+
+services:
+  - type: web
+    name: ntso-website
+    runtime: docker
+    region: singapore
+    plan: starter
+    branch: main
+    dockerfilePath: ./ntso-website/Dockerfile
+    dockerContext: ./ntso-website
+    healthCheckPath: /api/health
+    autoDeploy: true
+    buildFilter:
+      paths: ["ntso-website/**"]
+    disk:
+      name: uploads
+      mountPath: /data/uploads
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: ntso-db, property: connectionString }
+      - key: APP_URL
+        value: https://ntso.in
+      - key: NEXT_PUBLIC_SITE_URL
+        value: https://ntso.in
+      - key: SALES_NOTIFY_EMAIL
+        value: sales@NTSO.in
+      - key: SUPPORT_NOTIFY_EMAIL
+        value: sales@NTSO.in
+      - key: UPLOAD_DIR
+        value: /data/uploads
+      - key: STORAGE_DRIVER
+        value: local
+      - key: RATE_LIMIT_STORE
+        value: database
+      - key: EMAIL_FROM
+        value: NTSO Private Limited <no-reply@ntso.in>
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: CLIENT_IP_HEADER
+        sync: false
+      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+
+  - type: cron
+    name: ntso-maintenance
+    runtime: docker
+    region: singapore
+    plan: starter
+    branch: main
+    schedule: "30 21 * * *" # 03:00 IST daily
+    dockerfilePath: ./ntso-website/Dockerfile
+    dockerContext: ./ntso-website
+    dockerCommand: node ops/maintenance.js
+    buildFilter:
+      paths: ["ntso-website/**"]
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: ntso-db, property: connectionString }
+      - key: AUDIT_LOG_RETENTION_DAYS
+        value: "365"

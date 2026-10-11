@@ -132,6 +132,20 @@ The GitHub Actions workflow (`.github/workflows/ntso-website-ci.yml`) runs all o
 
 ## 4. Deployment
 
+**Recommended: Render.** Follow the step-by-step guide in [`docs/deploy-render.md`](docs/deploy-render.md). The repository's `render.yaml` Blueprint creates the database, the website (with an upload disk) and the daily maintenance job in one click. The guide also covers the `sales@NTSO.in` mailbox (Zoho Mail), website email (Brevo), DNS at GoDaddy, Hostinger or BigRock, and post-launch checks.
+
+The Docker image includes operational scripts you can run inside the container (for example from Render's Shell or with `docker exec`):
+
+| Command | Purpose |
+| --- | --- |
+| `node ops/seed.js` | Load categories, sample catalogue, services and FAQs (idempotent) |
+| `ADMIN_EMAIL=… ADMIN_PASSWORD=… ADMIN_NAME=… node ops/create-admin.js` | Create or reset an admin account |
+| `node ops/maintenance.js` | Expired-session and rate-limit clean-up |
+
+The container starts as root only long enough to make a mounted upload disk writable. Database migrations and the web server then run as the unprivileged `app` user (uid 1001).
+
+Admin → Website settings has deployment diagnostics: the client IP the site detects (to configure `CLIENT_IP_HEADER`), an upload-storage write check, and a **Send test email** button.
+
 ### Option A — Docker (single VPS, e.g. in an Indian region)
 
 ```bash
