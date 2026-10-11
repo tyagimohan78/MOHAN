@@ -1,6 +1,7 @@
 /* Create or reset an administrator account.
    Usage: ADMIN_EMAIL=you@ntso.in ADMIN_PASSWORD='...' ADMIN_NAME='Mohan Tyagi' npm run admin:create
-   Optional: ADMIN_ROLE=ADMIN|SALES|SUPPORT|CONTENT (default ADMIN). Credentials are never hard-coded. */
+   Optional: ADMIN_ROLE=ADMIN|SALES|SUPPORT|CONTENT (default ADMIN). Credentials are never hard-coded.
+   ADMIN_ONLY_IF_NONE=true: do nothing if any ADMIN account already exists (safe to run on every start). */
 import { PrismaClient, type Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -13,6 +14,11 @@ async function main() {
   const role = (process.env.ADMIN_ROLE || "ADMIN") as Role;
   if (!email || !password) throw new Error("Set ADMIN_EMAIL and ADMIN_PASSWORD environment variables.");
   if (!["ADMIN", "SALES", "SUPPORT", "CONTENT"].includes(role)) throw new Error("ADMIN_ROLE must be ADMIN, SALES, SUPPORT or CONTENT.");
+  // Bootstrap mode (used on container start): only create the first admin; never reset existing passwords.
+  if (process.env.ADMIN_ONLY_IF_NONE === "true" && (await db.adminUser.count({ where: { role: "ADMIN" } })) > 0) {
+    console.log("An admin account already exists; initial admin not created.");
+    return;
+  }
   if (password.length < 12 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
     throw new Error("Password must be at least 12 characters and include upper-case, lower-case letters and a number.");
   }

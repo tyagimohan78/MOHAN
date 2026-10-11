@@ -85,7 +85,9 @@ Check: from your personal email, send a message to `sales@ntso.in` and confirm i
 
 ## Step 4 — Load the catalogue and create your admin login
 
-In Render: **ntso-website → Shell** (top of the service page). Run:
+**Automatic (no shell needed):** the Blueprint sets `SEED_ON_START=true`, and asks for `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD`. On start, the website loads the catalogue (safe to repeat, never duplicates or overwrites edits). It creates that first admin **only if no admin exists yet**, so later restarts never reset the password. After your first login, change the password in **My account** and you may delete `INITIAL_ADMIN_PASSWORD` from Render's environment.
+
+**Manual alternative:** in Render, open **ntso-website → Shell** (top of the service page). Run:
 
 ```sh
 node ops/seed.js

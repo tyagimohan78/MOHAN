@@ -39,6 +39,26 @@ execFileSync(process.execPath, ["/prisma-cli/node_modules/prisma/build/index.js"
   ...dropTo,
 });
 
+// Optional first-run bootstrap (useful on hosts without shell access):
+//   SEED_ON_START=true                 → load categories, sample catalogue, services and FAQs (idempotent)
+//   INITIAL_ADMIN_EMAIL / _PASSWORD / _NAME → create the first ADMIN account only if none exists yet
+const runOps = (script, extraEnv) =>
+  execFileSync(process.execPath, [script], { stdio: "inherit", env: { ...process.env, HOME: "/tmp", ...extraEnv }, ...dropTo });
+if (process.env.SEED_ON_START === "true") runOps("ops/seed.js");
+if (process.env.INITIAL_ADMIN_EMAIL && process.env.INITIAL_ADMIN_PASSWORD) {
+  try {
+    runOps("ops/create-admin.js", {
+      ADMIN_EMAIL: process.env.INITIAL_ADMIN_EMAIL,
+      ADMIN_PASSWORD: process.env.INITIAL_ADMIN_PASSWORD,
+      ADMIN_NAME: process.env.INITIAL_ADMIN_NAME || "Administrator",
+      ADMIN_ROLE: "ADMIN",
+      ADMIN_ONLY_IF_NONE: "true",
+    });
+  } catch {
+    console.error(JSON.stringify({ level: "error", event: "entrypoint.initial_admin_failed" }));
+  }
+}
+
 if (isRoot) {
   process.setgid(APP_GID);
   process.setuid(APP_UID);
