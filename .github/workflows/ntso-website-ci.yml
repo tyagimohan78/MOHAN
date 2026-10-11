@@ -1,0 +1,67 @@
+name: ntso-website CI
+on:
+  push:
+    paths: ["ntso-website/**", ".github/workflows/ntso-website-ci.yml"]
+  pull_request:
+    paths: ["ntso-website/**", ".github/workflows/ntso-website-ci.yml"]
+
+defaults:
+  run:
+    working-directory: ntso-website
+
+jobs:
+  checks:
+    name: Lint, types, unit tests, build
+    runs-on: ubuntu-latest
+    env:
+      APP_URL: https://ntso.in
+      NEXT_PUBLIC_SITE_URL: https://ntso.in
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: ntso-website/package-lock.json }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  integration-e2e:
+    name: Integration, end-to-end and accessibility tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: ci, POSTGRES_PASSWORD: ci, POSTGRES_DB: ntso_ci }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U ci" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ntso_ci?schema=public
+      TEST_DATABASE_URL: postgresql://ci:ci@localhost:5432/ntso_test?schema=public
+      APP_URL: http://localhost:3000
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      E2E_ADMIN_EMAIL: admin@ci.test
+      E2E_ADMIN_PASSWORD: Ci-Admin-Passw0rd!
+      E2E_SALES_EMAIL: sales@ci.test
+      E2E_SALES_PASSWORD: Ci-Sales-Passw0rd!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: ntso-website/package-lock.json }
+      - run: npm ci
+      - run: PGPASSWORD=ci psql -h localhost -U ci -d ntso_ci -c "CREATE DATABASE ntso_test"
+      - run: npm run test:integration
+      - run: npx prisma migrate deploy && npm run db:seed
+      - run: ADMIN_EMAIL=$E2E_ADMIN_EMAIL ADMIN_PASSWORD=$E2E_ADMIN_PASSWORD npm run admin:create
+      - run: ADMIN_EMAIL=$E2E_SALES_EMAIL ADMIN_PASSWORD=$E2E_SALES_PASSWORD ADMIN_ROLE=SALES npm run admin:create
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run build
+      - name: Start production server
+        run: |
+          cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/
+          PORT=3000 node .next/standalone/server.js > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3000/api/health && break; sleep 2; done
+      - run: npm run test:e2e
+      - run: npm run test:a11y
+      - if: failure()
+        run: cat server.log || true

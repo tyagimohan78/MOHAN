@@ -1,0 +1,9 @@
+# Example Caddy reverse proxy with automatic HTTPS (Let's Encrypt) for ntso.in
+ntso.in, www.ntso.in {
+	@www host www.ntso.in
+	redir @www https://ntso.in{uri} permanent
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+	encode zstd gzip
+}
