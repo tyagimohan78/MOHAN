@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import Script from "next/script";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { JsonLd } from "@/components/ui/json-ld";
@@ -19,6 +20,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <main id="main">{children}</main>
       <Footer />
       <JsonLd data={organizationJsonLd()} />
+      <Script src="/chatbot.js" strategy="afterInteractive" />
     </>
   );
 }
