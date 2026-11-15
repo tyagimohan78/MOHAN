@@ -28,16 +28,17 @@ if (isRoot && (process.env.STORAGE_DRIVER || "local") === "local") {
     fs.mkdirSync(uploadDir, { recursive: true });
     chownTree(uploadDir);
   } catch (err) {
-    console.error(JSON.stringify({ level: "error", event: "entrypoint.upload_dir_chown_failed", dir: uploadDir, error: String(err) }));
+    console.error(JSON.stringify({ level: "error", event: "entrypoint upload_dir_chown_failed", dir: uploadDir, error: String(err) }));
   }
 }
 
 const dropTo = isRoot ? { uid: APP_UID, gid: APP_GID } : {};
-execFileSync(process.execPath, ["/prisma-cli/node_modules/prisma/build/index.js", "migrate", "deploy", "--schema", "prisma/schema.prisma"], {
-  stdio: "inherit",
-  env: { ...process.env, HOME: "/tmp" },
-  ...dropTo,
-});
+// Skip migrate deploy on Railway until DB is reachable; run manually once healthy.
+// execFileSync(process.execPath, ["/prisma-cli/node_modules/prisma/build/index.js", "migrate", "deploy", "--schema", "prisma/schema.prisma"], {
+//   stdio: "inherit",
+//   env: { ...process.env, HOME: "/tmp" },
+//   ...dropTo,
+// });
 
 // Optional first-run bootstrap (useful on hosts without shell access):
 //   SEED_ON_START=true                 → load categories, sample catalogue, services and FAQs (idempotent)
